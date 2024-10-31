@@ -1,20 +1,30 @@
 //! Process (stereo) input and play the result (in stereo).
 
+use audio::track::{build_track, run_track};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SizedSample};
 use fundsp::hacker32::*;
 
 use crossbeam_channel::{bounded, Receiver, Sender};
 
+mod audio;
+
 fn main() {
     // Sender / receiver for left and right channels (stereo mic).
     let (sender, receiver) = bounded(4096);
 
+    let (track_controller, track, track_audio_receiver) = build_track(receiver);
+
+    run_track(track);
+
+    track_controller.record();
+
     build_input_device(sender);
 
-    build_output_device(receiver);
+    build_output_device(track_audio_receiver);
 
     println!("Processing stereo input to stereo output.");
+
     loop {
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
@@ -39,6 +49,7 @@ pub fn build_input_device(sender: Sender<(f32, f32)>) {
     // Start input.
     let in_device = host.default_input_device().unwrap();
     let in_config = in_device.default_input_config().unwrap();
+    println!("{}", in_config.channels());
     match in_config.sample_format() {
         cpal::SampleFormat::F32 => run_in::<f32>(&in_device, &in_config.into(), sender),
         cpal::SampleFormat::I16 => run_in::<i16>(&in_device, &in_config.into(), sender),

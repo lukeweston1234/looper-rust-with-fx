@@ -5,6 +5,7 @@ use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
 enum TrackState {
     Playing,
     Paused,
+    OnlyInput,
     Stopped,
     Recording,
     End,
@@ -28,6 +29,9 @@ impl TrackController {
     }
     pub fn record(&self) {
         self.sender.send(TrackState::Recording);
+    }
+    pub fn only_input(&self) {
+        self.sender.send(TrackState::OnlyInput);
     }
     pub fn end(&self) {
         self.sender.send(TrackState::End);
@@ -80,6 +84,10 @@ where
         if let Ok(sample) = self.input_receiver.try_recv() {
             self.audio_sender.send(sample).unwrap();
 
+            if self.state == TrackState::OnlyInput {
+                return; // Don't worry about recording if we are in an input only loop
+            }
+
             let clip = self
                 .recording_clip
                 .get_or_insert_with(|| Vec::with_capacity(self.initial_vec_size));
@@ -111,7 +119,7 @@ where
         track.handle_controller_messages();
 
         match track.state {
-            TrackState::Recording => track.handle_recording(),
+            TrackState::Recording | TrackState::OnlyInput => track.handle_recording(),
             TrackState::Playing => track.handle_playback(),
             TrackState::Paused | TrackState::Stopped => {
                 std::thread::sleep(std::time::Duration::from_millis(10));

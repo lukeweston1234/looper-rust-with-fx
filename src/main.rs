@@ -62,13 +62,15 @@ fn main() {
 
     std::thread::sleep(Duration::from_secs(8));
 
+    track_four_controller.record();
+
+    std::thread::sleep(Duration::from_secs(8));
+
     track_five_controller.record();
 
     std::thread::sleep(Duration::from_secs(8));
 
-    track_six_controller.record();
-
-    std::thread::sleep(Duration::from_secs(8));
+    track_six_controller.only_input();
 
     println!("Processing stereo input to stereo output.");
 

@@ -1,0 +1,13 @@
+[package]
+name = "demo"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+fundsp = "0.20.0"
+crossbeam-channel = "0.5.13"
+cpal = "0.15.3"
+ringbuf = "0.4.7"
+hound = "3.5.1"
+atomic_enum = "0.3.0"
+rand = "0.8.5"

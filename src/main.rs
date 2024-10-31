@@ -24,22 +24,31 @@ fn main() {
     let (track_two_controller, track_two, track_two_receiver) = build_track(receiver.clone());
     let (track_three_controller, track_three, track_three_receiver) = build_track(receiver.clone());
     let (track_four_controller, track_four, track_four_receiver) = build_track(receiver.clone());
+    let (track_five_controller, track_five, track_five_receiver) = build_track(receiver.clone());
+    let (track_six_controller, track_six, track_six_receiver) = build_track(receiver.clone());
 
     let mixer_one = An(MixerNode::<1>::new(track_one_receiver));
     let mixer_two = An(MixerNode::<2>::new(track_two_receiver));
     let mixer_three = An(MixerNode::<3>::new(track_three_receiver));
     let mixer_four = An(MixerNode::<4>::new(track_four_receiver));
+    let mixer_five = An(MixerNode::<5>::new(track_five_receiver));
+    let mixer_six = An(MixerNode::<6>::new(track_six_receiver));
+    // let master_bus = BusNode::new(mixer_one, mixer_two, mixer_three, mixer_four);
 
-    let master_bus = BusNode::new(mixer_one, mixer_two, mixer_three, mixer_four);
+    let master_bus = (mixer_one + mixer_two + mixer_three + mixer_four + mixer_five + mixer_six)
+        >> reverb2_stereo(20.0, 3.0, 1.0, 0.2, highshelf_hz(1000.0, 1.0, db_amp(-1.0)))
+        >> (chorus(0, 0.0, 0.03, 0.2) | chorus(1, 0.0, 0.03, 0.2));
 
     run_track(track_one);
     run_track(track_two);
     run_track(track_three);
     run_track(track_four);
+    run_track(track_five);
+    run_track(track_six);
 
     build_input_device(sender);
 
-    build_output_device(master_bus);
+    build_output_device(BlockRateAdapter::new(Box::new(master_bus)));
 
     track_one_controller.record();
 
@@ -53,7 +62,11 @@ fn main() {
 
     std::thread::sleep(Duration::from_secs(8));
 
-    track_four_controller.record();
+    track_five_controller.record();
+
+    std::thread::sleep(Duration::from_secs(8));
+
+    track_six_controller.record();
 
     std::thread::sleep(Duration::from_secs(8));
 
@@ -64,7 +77,7 @@ fn main() {
     }
 }
 
-pub fn build_output_device(mut master_bus: BusNode<1, 2, 3, 4>) {
+pub fn build_output_device(mut master_bus: BlockRateAdapter) {
     let host = cpal::default_host();
 
     // Start output.
@@ -155,17 +168,15 @@ where
     }
 }
 
-fn run_out<T>(device: &cpal::Device, config: &cpal::StreamConfig, mut bus_node: BusNode<1, 2, 3, 4>)
+fn run_out<T>(device: &cpal::Device, config: &cpal::StreamConfig, mut bus: BlockRateAdapter)
 where
     T: SizedSample + FromSample<f32>,
 {
     let channels = config.channels as usize;
 
-    let mut graph = bus_node.build_graph().expect("Could not build master bus!");
+    bus.set_sample_rate(config.sample_rate.0 as f64);
 
-    graph.set_sample_rate(config.sample_rate.0 as f64);
-
-    let mut next_value = move || graph.get_stereo();
+    let mut next_value = move || bus.get_stereo();
 
     let err_fn = |err| eprintln!("An error occurred on stream: {}", err);
     let stream = device.build_output_stream(

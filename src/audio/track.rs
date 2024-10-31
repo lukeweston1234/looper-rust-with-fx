@@ -138,7 +138,7 @@ pub fn build_track(
         track_state_receiver,
         sampler,
         None,
-        705600,
+        705600, // 44100k, 60 bpm, 4 beats,
     );
 
     (track_controller, track, track_audio_receiver)

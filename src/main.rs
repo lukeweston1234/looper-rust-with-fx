@@ -1,27 +1,61 @@
 //! Process (stereo) input and play the result (in stereo).
 
+use std::time::Duration;
+
+use audio::bus::BusNode;
+use audio::mixer::MixerNode;
 use audio::track::{build_track, run_track};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SizedSample};
 use fundsp::hacker32::*;
+use std::env;
 
 use crossbeam_channel::{bounded, Receiver, Sender};
 
 mod audio;
 
 fn main() {
+    env::set_var("RUST_BACKTRACE", "full");
+
     // Sender / receiver for left and right channels (stereo mic).
     let (sender, receiver) = bounded(4096);
 
-    let (track_controller, track, track_audio_receiver) = build_track(receiver);
+    let (track_one_controller, track_one, track_one_receiver) = build_track(receiver.clone());
+    let (track_two_controller, track_two, track_two_receiver) = build_track(receiver.clone());
+    let (track_three_controller, track_three, track_three_receiver) = build_track(receiver.clone());
+    let (track_four_controller, track_four, track_four_receiver) = build_track(receiver.clone());
 
-    run_track(track);
+    let mixer_one = An(MixerNode::<1>::new(track_one_receiver));
+    let mixer_two = An(MixerNode::<2>::new(track_two_receiver));
+    let mixer_three = An(MixerNode::<3>::new(track_three_receiver));
+    let mixer_four = An(MixerNode::<4>::new(track_four_receiver));
 
-    track_controller.record();
+    let master_bus = BusNode::new(mixer_one, mixer_two, mixer_three, mixer_four);
+
+    run_track(track_one);
+    run_track(track_two);
+    run_track(track_three);
+    run_track(track_four);
 
     build_input_device(sender);
 
-    build_output_device(track_audio_receiver);
+    build_output_device(master_bus);
+
+    track_one_controller.record();
+
+    std::thread::sleep(Duration::from_secs(8));
+
+    track_two_controller.record();
+
+    std::thread::sleep(Duration::from_secs(8));
+
+    track_three_controller.record();
+
+    std::thread::sleep(Duration::from_secs(8));
+
+    track_four_controller.record();
+
+    std::thread::sleep(Duration::from_secs(8));
 
     println!("Processing stereo input to stereo output.");
 
@@ -30,16 +64,16 @@ fn main() {
     }
 }
 
-pub fn build_output_device(receiver: Receiver<(f32, f32)>) {
+pub fn build_output_device(mut master_bus: BusNode<1, 2, 3, 4>) {
     let host = cpal::default_host();
 
     // Start output.
     let out_device = host.default_output_device().unwrap();
     let out_config = out_device.default_output_config().unwrap();
     match out_config.sample_format() {
-        cpal::SampleFormat::F32 => run_out::<f32>(&out_device, &out_config.into(), receiver),
-        cpal::SampleFormat::I16 => run_out::<i16>(&out_device, &out_config.into(), receiver),
-        cpal::SampleFormat::U16 => run_out::<u16>(&out_device, &out_config.into(), receiver),
+        cpal::SampleFormat::F32 => run_out::<f32>(&out_device, &out_config.into(), master_bus),
+        cpal::SampleFormat::I16 => run_out::<i16>(&out_device, &out_config.into(), master_bus),
+        cpal::SampleFormat::U16 => run_out::<u16>(&out_device, &out_config.into(), master_bus),
         format => eprintln!("Unsupported sample format: {}", format),
     }
 }
@@ -121,18 +155,14 @@ where
     }
 }
 
-fn run_out<T>(device: &cpal::Device, config: &cpal::StreamConfig, receiver: Receiver<(f32, f32)>)
+fn run_out<T>(device: &cpal::Device, config: &cpal::StreamConfig, mut bus_node: BusNode<1, 2, 3, 4>)
 where
     T: SizedSample + FromSample<f32>,
 {
     let channels = config.channels as usize;
 
-    let input = An(InputNode::new(receiver));
-    let reverb = reverb2_stereo(20.0, 3.0, 1.0, 0.2, highshelf_hz(1000.0, 1.0, db_amp(-1.0)));
-    let chorus = chorus(0, 0.0, 0.03, 0.2) | chorus(1, 0.0, 0.03, 0.2);
-    // Here is the final input-to-output processing chain.
-    let graph = input >> chorus >> (0.8 * reverb & 0.2 * multipass());
-    let mut graph = BlockRateAdapter::new(Box::new(graph));
+    let mut graph = bus_node.build_graph().expect("Could not build master bus!");
+
     graph.set_sample_rate(config.sample_rate.0 as f64);
 
     let mut next_value = move || graph.get_stereo();

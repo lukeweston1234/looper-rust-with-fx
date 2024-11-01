@@ -96,15 +96,21 @@ where
             clip.push(sample.1);
 
             if clip.len() >= self.initial_vec_size {
-                let final_clip = self.recording_clip.take().unwrap();
-                self.sampler
-                    .set_sample(AudioSample::new(final_clip, false, 44_100));
-                self.state = TrackState::Playing;
-                self.sampler.play();
+                self.add_clip();
             }
         }
     }
+    fn add_clip(&mut self) {
+        let final_clip = self.recording_clip.take().unwrap();
+        self.sampler
+            .set_sample(AudioSample::new(final_clip, false, 44_100));
+        self.state = TrackState::Playing;
+        self.sampler.play();
+    }
     fn handle_playback(&mut self) {
+        if self.recording_clip.is_some() {
+            self.add_clip();
+        }
         if let Some(sample) = self.sampler.next_sample() {
             let _ = self.audio_sender.send(sample);
         }
@@ -121,9 +127,7 @@ where
         match track.state {
             TrackState::Recording | TrackState::OnlyInput => track.handle_recording(),
             TrackState::Playing => track.handle_playback(),
-            TrackState::Paused | TrackState::Stopped => {
-                std::thread::sleep(std::time::Duration::from_millis(10));
-            }
+            TrackState::Paused | TrackState::Stopped => {}
             TrackState::End => break,
         }
     });
@@ -134,7 +138,7 @@ pub fn build_track(
 ) -> (TrackController, Track<f32>, Receiver<(f32, f32)>) {
     let (track_state_sender, track_state_receiver) = unbounded::<TrackState>();
 
-    let (track_audio_sender, track_audio_receiver) = bounded::<(f32, f32)>(1024);
+    let (track_audio_sender, track_audio_receiver) = bounded::<(f32, f32)>(4096);
 
     let track_controller = TrackController::new(track_state_sender);
 

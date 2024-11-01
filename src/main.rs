@@ -118,17 +118,33 @@ fn main() {
 
     std::thread::sleep(Duration::from_secs(8));
 
+    track_one_controller.play();
+
+    std::thread::sleep(Duration::from_millis(5));
+
     track_two_controller.record();
 
     std::thread::sleep(Duration::from_secs(8));
+
+    track_two_controller.play();
+
+    std::thread::sleep(Duration::from_millis(5));
 
     track_three_controller.record();
 
     std::thread::sleep(Duration::from_secs(8));
 
+    track_three_controller.play();
+
+    std::thread::sleep(Duration::from_millis(5));
+
     track_four_controller.record();
 
     std::thread::sleep(Duration::from_secs(8));
+
+    track_four_controller.play();
+
+    std::thread::sleep(Duration::from_millis(5));
 
     track_five_controller.record();
 

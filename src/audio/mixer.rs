@@ -13,7 +13,7 @@ impl<const ID: u64> MixerNode<ID> {
         Self {
             receiver,
             reverb_mix: shared(0.0),
-            gain: shared(0.8),
+            gain: shared(1.0),
         }
     }
     pub fn get_gain(&self) -> Shared {

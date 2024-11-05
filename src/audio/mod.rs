@@ -1,3 +1,4 @@
+pub mod audio_graph;
 pub mod audio_sample;
 pub mod mixer;
 pub mod playable;

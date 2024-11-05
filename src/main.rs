@@ -1,5 +1,6 @@
 //! Process (stereo) input and play the result (in stereo).
 
+use audio::audio_graph::build_audio_graph;
 use audio::mixer::MixerNode;
 use audio::stream::{build_input_device, build_output_device};
 use audio::track::{build_track, run_track};
@@ -11,6 +12,7 @@ use std::time::Duration;
 
 use crossbeam_channel::{bounded, Receiver, Sender};
 
+mod app;
 mod audio;
 
 fn main() {
@@ -34,70 +36,6 @@ fn main() {
     let mixer_six = An(MixerNode::<6>::new(track_six_receiver));
     // let master_bus = BusNode::new(mixer_one, mixer_two, mixer_three, mixer_four);
 
-    let reverb = reverb2_stereo(20.0, 3.0, 1.0, 0.2, highshelf_hz(1000.0, 1.0, db_amp(-1.0)));
-    let chorus = chorus(0, 0.0, 0.03, 0.2) | chorus(1, 0.0, 0.03, 0.2);
-
-    let mx_one_wet = mixer_one.get_reverb_mix();
-    let mx_one_gain = mixer_one.get_gain();
-
-    let mixer_one_processed = mixer_one
-        >> ((var(&mx_one_wet) | var(&mx_one_wet)) * (reverb.clone() >> chorus.clone())
-            & ((1.0 - var(&mx_one_wet)) | (1.0 - var(&mx_one_wet))) * multipass())
-        >> multipass() * (var(&mx_one_gain) | var(&mx_one_gain));
-
-    let mx_two_wet = mixer_two.get_reverb_mix();
-    let mx_two_gain = mixer_two.get_gain();
-
-    let mixer_two_processed = mixer_two
-        >> ((var(&mx_two_wet) | var(&mx_two_wet)) * (reverb.clone() >> chorus.clone())
-            & ((1.0 - var(&mx_two_wet)) | (1.0 - var(&mx_two_wet))) * multipass())
-        >> multipass() * (var(&mx_two_gain) | var(&mx_two_gain));
-
-    let mx_three_wet = mixer_three.get_reverb_mix();
-    let mx_three_gain = mixer_three.get_gain();
-
-    let mixer_three_processed = mixer_three
-        >> ((var(&mx_three_wet) | var(&mx_three_wet)) * (reverb.clone() >> chorus.clone())
-            & ((1.0 - var(&mx_three_wet)) | (1.0 - var(&mx_three_wet))) * multipass())
-        >> multipass() * (var(&mx_three_gain) | var(&mx_three_gain));
-
-    let mx_four_wet = mixer_four.get_reverb_mix();
-    let mx_four_gain = mixer_four.get_gain();
-
-    let mixer_four_processed = mixer_four
-        >> ((var(&mx_four_wet) | var(&mx_four_wet)) * (reverb.clone() >> chorus.clone())
-            & ((1.0 - var(&mx_four_wet)) | (1.0 - var(&mx_four_wet))) * multipass())
-        >> multipass() * (var(&mx_four_gain) | var(&mx_four_gain));
-
-    let mx_five_wet = mixer_five.get_reverb_mix();
-    let mx_five_gain = mixer_five.get_gain();
-
-    let mixer_five_processed = mixer_five
-        >> ((var(&mx_five_wet) | var(&mx_five_wet)) * (reverb.clone() >> chorus.clone())
-            & ((1.0 - var(&mx_five_wet)) | (1.0 - var(&mx_five_wet))) * multipass())
-        >> multipass() * (var(&mx_five_gain) | var(&mx_five_gain));
-
-    let mx_six_wet = mixer_six.get_reverb_mix();
-    let mx_six_gain = mixer_six.get_gain();
-
-    let mixer_six_processed = mixer_six
-        >> ((var(&mx_six_wet) | var(&mx_six_wet)) * (reverb.clone() >> chorus.clone())
-            & ((1.0 - var(&mx_six_wet)) | (1.0 - var(&mx_six_wet))) * multipass())
-        >> multipass() * (var(&mx_six_gain) | var(&mx_six_gain));
-
-    let master_reverb = shared(0.6);
-    let master_gain = shared(0.7);
-
-    let master_bus = (mixer_one_processed
-        + mixer_two_processed
-        + mixer_three_processed
-        + mixer_four_processed
-        + mixer_five_processed
-        + mixer_six_processed)
-        >> ((var(&master_reverb) | var(&master_reverb)) * (reverb.clone() >> chorus.clone())
-            & ((1.0 - var(&master_reverb)) | (1.0 - var(&master_reverb))) * multipass())
-        >> multipass() * (var(&master_gain) | var(&master_gain));
-
     run_track(track_one);
     run_track(track_two);
     run_track(track_three);
@@ -105,9 +43,18 @@ fn main() {
     run_track(track_five);
     run_track(track_six);
 
+    let master_bus = build_audio_graph(
+        mixer_one.clone(),
+        mixer_two.clone(),
+        mixer_three.clone(),
+        mixer_four.clone(),
+        mixer_five.clone(),
+        mixer_six.clone(),
+    );
+
     build_input_device(sender);
 
-    build_output_device(BlockRateAdapter::new(Box::new(master_bus)));
+    build_output_device(BlockRateAdapter::new(master_bus));
 
     track_one_controller.record();
 

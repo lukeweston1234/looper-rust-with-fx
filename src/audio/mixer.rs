@@ -4,8 +4,8 @@ use fundsp::hacker32::*;
 #[derive(Clone)]
 pub struct MixerNode<const ID: u64> {
     receiver: Receiver<(f32, f32)>,
-    reverb_mix: Shared,
-    gain: Shared,
+    pub reverb_mix: Shared,
+    pub gain: Shared,
 }
 
 impl<const ID: u64> MixerNode<ID> {
@@ -19,9 +19,14 @@ impl<const ID: u64> MixerNode<ID> {
     pub fn get_gain(&self) -> Shared {
         self.gain.clone()
     }
-
+    pub fn set_gain(&self, gain: f32) {
+        self.gain.set_value(gain);
+    }
     pub fn get_reverb_mix(&self) -> Shared {
         self.reverb_mix.clone()
+    }
+    pub fn set_reverb_mix(&self, reverb_mix: f32) {
+        self.reverb_mix.set_value(reverb_mix);
     }
 }
 

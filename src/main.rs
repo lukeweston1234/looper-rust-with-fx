@@ -1,5 +1,6 @@
 //! Process (stereo) input and play the result (in stereo).
 
+use app::app_controller::{build_app, run_app, MixerNodeEnum};
 use audio::audio_graph::build_audio_graph;
 use audio::mixer::MixerNode;
 use audio::stream::{build_input_device, build_output_device};
@@ -56,45 +57,57 @@ fn main() {
 
     build_output_device(BlockRateAdapter::new(master_bus));
 
-    track_one_controller.record();
+    let mixers: Vec<MixerNodeEnum> = vec![
+        MixerNodeEnum::MixerOne(mixer_one),
+        MixerNodeEnum::MixerTwo(mixer_two),
+        MixerNodeEnum::MixerThree(mixer_three),
+        MixerNodeEnum::MixerFour(mixer_four),
+        MixerNodeEnum::MixerFive(mixer_five),
+        MixerNodeEnum::MixerSix(mixer_six),
+    ];
 
-    std::thread::sleep(Duration::from_secs(8));
+    let track_controllers = vec![
+        track_one_controller,
+        track_two_controller,
+        track_three_controller,
+        track_four_controller,
+        track_five_controller,
+        track_six_controller,
+    ];
 
-    track_one_controller.play();
+    let (app_controller, app) = build_app(mixers, track_controllers);
 
-    std::thread::sleep(Duration::from_millis(5));
+    run_app(app);
 
-    track_two_controller.record();
+    app_controller.record(0);
 
-    std::thread::sleep(Duration::from_secs(8));
+    std::thread::sleep(std::time::Duration::from_secs(8));
 
-    track_two_controller.play();
+    app_controller.record(1);
 
-    std::thread::sleep(Duration::from_millis(5));
+    std::thread::sleep(std::time::Duration::from_secs(8));
 
-    track_three_controller.record();
+    app_controller.record(2);
 
-    std::thread::sleep(Duration::from_secs(8));
+    std::thread::sleep(std::time::Duration::from_secs(8));
 
-    track_three_controller.play();
+    app_controller.record(3);
 
-    std::thread::sleep(Duration::from_millis(5));
+    std::thread::sleep(std::time::Duration::from_secs(8));
 
-    track_four_controller.record();
+    app_controller.record(4);
 
-    std::thread::sleep(Duration::from_secs(8));
+    std::thread::sleep(std::time::Duration::from_secs(8));
 
-    track_four_controller.play();
+    app_controller.track_only_feedback(5);
 
-    std::thread::sleep(Duration::from_millis(5));
+    println!("feedback!");
 
-    track_five_controller.record();
+    std::thread::sleep(std::time::Duration::from_secs(3));
 
-    std::thread::sleep(Duration::from_secs(8));
+    println!("More reverb!");
 
-    track_six_controller.only_input();
-
-    println!("Processing stereo input to stereo output.");
+    app_controller.set_mixer_reverb_mix(5, 1.0);
 
     loop {
         std::thread::sleep(std::time::Duration::from_secs(1));

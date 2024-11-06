@@ -1,6 +1,6 @@
 use std::usize;
 
-use crate::audio::track::TrackController;
+use crate::audio::track::{self, TrackController};
 use crate::audio::{mixer::MixerNode, track::Track};
 use crossbeam_channel::{bounded, Receiver, Sender};
 use fundsp::hacker32::*;
@@ -12,11 +12,45 @@ pub enum AppControllerEnum {
     Stop,
     Loop,
     Record(usize),
+    TrackOnlyFeedback(usize),
     Exit,
     SetMixerGain(usize, f32),
     SetMixerReverbMix(usize, f32),
 }
 
+// This is gross, but I want to access nodes from an index,
+// and I am having a hard time boxing the constant mixers from FunDSP
+pub enum MixerNodeEnum {
+    MixerOne(An<MixerNode<1>>),
+    MixerTwo(An<MixerNode<2>>),
+    MixerThree(An<MixerNode<3>>),
+    MixerFour(An<MixerNode<4>>),
+    MixerFive(An<MixerNode<5>>),
+    MixerSix(An<MixerNode<6>>),
+}
+impl MixerNodeEnum {
+    fn set_gain(&self, gain: f32) {
+        match self {
+            MixerNodeEnum::MixerOne(node) => node.set_gain(gain),
+            MixerNodeEnum::MixerTwo(node) => node.set_gain(gain),
+            MixerNodeEnum::MixerThree(node) => node.set_gain(gain),
+            MixerNodeEnum::MixerFour(node) => node.set_gain(gain),
+            MixerNodeEnum::MixerFive(node) => node.set_gain(gain),
+            MixerNodeEnum::MixerSix(node) => node.set_gain(gain),
+        }
+    }
+
+    fn set_reverb_mix(&self, mix: f32) {
+        match self {
+            MixerNodeEnum::MixerOne(node) => node.set_reverb_mix(mix),
+            MixerNodeEnum::MixerTwo(node) => node.set_reverb_mix(mix),
+            MixerNodeEnum::MixerThree(node) => node.set_reverb_mix(mix),
+            MixerNodeEnum::MixerFour(node) => node.set_reverb_mix(mix),
+            MixerNodeEnum::MixerFive(node) => node.set_reverb_mix(mix),
+            MixerNodeEnum::MixerSix(node) => node.set_reverb_mix(mix),
+        }
+    }
+}
 pub struct AppController {
     sender: Sender<AppControllerEnum>,
 }
@@ -43,18 +77,26 @@ impl AppController {
             .sender
             .send(AppControllerEnum::SetMixerReverbMix(track_index, mix));
     }
+    pub fn record(&self, track_index: usize) {
+        let _ = self.sender.send(AppControllerEnum::Record(track_index));
+    }
+    pub fn track_only_feedback(&self, track_index: usize) {
+        let _ = self
+            .sender
+            .send(AppControllerEnum::TrackOnlyFeedback(track_index));
+    }
 }
 
-pub struct App<const ID: u64> {
+pub struct App {
     receiver: Receiver<AppControllerEnum>,
     state: AppControllerEnum,
     track_controllers: Vec<TrackController>,
-    mixers: Vec<An<MixerNode<ID>>>,
+    mixers: Vec<MixerNodeEnum>,
 }
-impl<const ID: u64> App<ID> {
+impl App {
     pub fn new(
         receiver: Receiver<AppControllerEnum>,
-        mixers: Vec<An<MixerNode<ID>>>,
+        mixers: Vec<MixerNodeEnum>,
         track_controllers: Vec<TrackController>,
     ) -> Self {
         Self {
@@ -97,12 +139,17 @@ impl<const ID: u64> App<ID> {
             mixer.set_reverb_mix(mix);
         }
     }
+    pub fn track_only_feedback(&self, track_index: usize) {
+        if let Some(track) = self.track_controllers.get(track_index) {
+            track.only_input();
+        }
+    }
 }
 
-pub fn build_app<const ID: u64>(
-    mixers: Vec<An<MixerNode<ID>>>,
+pub fn build_app(
+    mixers: Vec<MixerNodeEnum>,
     track_controllers: Vec<TrackController>,
-) -> (AppController, App<ID>) {
+) -> (AppController, App) {
     let (sender, receiver) = bounded(10);
 
     let app_controller = AppController::new(sender);
@@ -112,14 +159,17 @@ pub fn build_app<const ID: u64>(
     (app_controller, app)
 }
 
-pub fn run_app<const ID: u64>(mut app: App<ID>) {
+pub fn run_app(mut app: App) {
     std::thread::spawn(move || loop {
-        if let Ok(msg) = app.receiver.try_recv() {
+        if let Ok(msg) = app.receiver.recv() {
             app.set_app_state(msg);
             match msg {
                 AppControllerEnum::Play => app.play(),
                 AppControllerEnum::Pause => app.pause(),
                 AppControllerEnum::Record(track_index) => app.record(track_index),
+                AppControllerEnum::TrackOnlyFeedback(track_index) => {
+                    app.track_only_feedback(track_index)
+                }
                 AppControllerEnum::Stop => app.stop(),
                 AppControllerEnum::SetMixerGain(track_index, gain) => {
                     app.set_mixer_gain(track_index, gain)

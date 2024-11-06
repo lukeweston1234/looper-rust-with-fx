@@ -8,8 +8,13 @@ pub fn build_output_device(master_bus: BlockRateAdapter) {
     let host = cpal::default_host();
 
     // Start output.
-    let out_device = host.default_output_device().unwrap();
-    let out_config = out_device.default_output_config().unwrap();
+    let out_device = host.default_output_device().expect("Could not get default output device!");
+    let out_config = out_device.default_output_config().expect("Could not get default output config!");
+
+    println!("Out channels: {:?}", out_config.channels());
+    println!("Out sample rate: {:?}", out_config.sample_rate());
+    println!("Out sample format: {:?}", out_config.sample_format());
+
     match out_config.sample_format() {
         cpal::SampleFormat::F32 => run_out::<f32>(&out_device, &out_config.into(), master_bus),
         cpal::SampleFormat::I16 => run_out::<i16>(&out_device, &out_config.into(), master_bus),
@@ -21,37 +26,18 @@ pub fn build_output_device(master_bus: BlockRateAdapter) {
 pub fn build_input_device(sender: Sender<(f32, f32)>) {
     let host = cpal::default_host();
     // Start input.
-    let in_device = host.default_input_device().unwrap();
-    let in_config = in_device.default_input_config().unwrap();
-    println!("{}", in_config.channels());
+    let in_device = host.default_input_device().expect("Could not get default input device!");
+    let in_config = in_device.default_input_config().expect("Could not get default input config!");
+
+    println!("Int channels: {:?}", in_config.channels());
+    println!("Int sample rate: {:?}", in_config.sample_rate());
+    println!("Int sample format: {:?}", in_config.sample_format());
+
     match in_config.sample_format() {
         cpal::SampleFormat::F32 => run_in::<f32>(&in_device, &in_config.into(), sender),
         cpal::SampleFormat::I16 => run_in::<i16>(&in_device, &in_config.into(), sender),
         cpal::SampleFormat::U16 => run_in::<u16>(&in_device, &in_config.into(), sender),
         format => eprintln!("Unsupported sample format: {}", format),
-    }
-}
-
-#[derive(Clone)]
-pub struct InputNode {
-    receiver: Receiver<(f32, f32)>,
-}
-
-impl InputNode {
-    pub fn new(receiver: Receiver<(f32, f32)>) -> Self {
-        InputNode { receiver }
-    }
-}
-
-impl AudioNode for InputNode {
-    const ID: u64 = 87;
-    type Inputs = U0;
-    type Outputs = U2;
-
-    #[inline]
-    fn tick(&mut self, _input: &Frame<f32, Self::Inputs>) -> Frame<f32, Self::Outputs> {
-        let (left, right) = self.receiver.try_recv().unwrap_or((0.0, 0.0));
-        [left, right].into()
     }
 }
 
